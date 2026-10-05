@@ -19,6 +19,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+PATCHES="$HERE/patches"   # Python patchers, movie converter, default key bindings
 VIDEOS=1 DELETE_ORIG=0 JOBS="$(nproc)" DESKTOP=0 RESTORE=0 GUI=1 ASSUME_YES=0 GAME_DIR=""
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; }
 while [ $# -gt 0 ]; do
@@ -81,6 +82,13 @@ ui_choose_dir() {
 step() { printf '\n==> %s\n' "$*"; }
 die() { ui_error "$*"; exit 1; }
 
+# No folder given: use the current folder or the installer's own folder if it is
+# the game folder (the package may be unpacked straight into it), else ask.
+if [ -z "$GAME_DIR" ]; then
+    for d in "$PWD" "$HERE"; do
+        [ -f "$d/KSHG.exe" ] && [ -d "$d/Data" ] && { GAME_DIR="$d"; break; }
+    done
+fi
 if [ -z "$GAME_DIR" ]; then
     GAME_DIR="$(ui_choose_dir)" || true
     [ -n "$GAME_DIR" ] || { usage; exit 2; }
@@ -88,6 +96,9 @@ fi
 [ -d "$GAME_DIR" ] || die "Folder not found: $GAME_DIR"
 GAME_DIR="$(cd "$GAME_DIR" && pwd)"
 DESKTOP_FILE="$HOME/.local/share/applications/sh-arcade.desktop"
+# true if the package itself lives in the game folder (its run_linux.sh is the
+# installed launcher, so it must be neither copied onto itself nor deleted)
+in_game_dir() { [ "$HERE/run_linux.sh" -ef "$GAME_DIR/run_linux.sh" ]; }
 
 # ---------------------------------------------------------------------------
 # --restore
@@ -103,7 +114,8 @@ Movies whose originals were deleted after conversion stay converted." "Restore" 
     find "$GAME_DIR" -name '*.orig' -print0 | while IFS= read -r -d '' f; do
         mv -f "$f" "${f%.orig}"; echo "  restored ${f#"$GAME_DIR"/}"
     done
-    rm -rf "$GAME_DIR/KSHG_cursor.exe" "$GAME_DIR/run_linux.sh" "$GAME_DIR/linux" "$GAME_DIR/.linux-tmp"
+    in_game_dir || rm -f "$GAME_DIR/run_linux.sh"
+    rm -rf "$GAME_DIR/KSHG_cursor.exe" "$GAME_DIR/linux" "$GAME_DIR/.linux-tmp"
     rm -f "$DESKTOP_FILE"
     ui_info "Original files restored.
 
@@ -165,16 +177,16 @@ Every file it changes is kept as a .orig copy, so you can undo everything with
 # Patches
 # ---------------------------------------------------------------------------
 step "Patching libutil.dll (MIDI input that fails to open no longer kills the game)"
-python3 "$HERE/patch_libutil_midi.py" "$GAME_DIR/libutil.dll"
+python3 "$PATCHES/patch_libutil_midi.py" "$GAME_DIR/libutil.dll"
 
 step "Patching shaiolib.CRK.dll (is_error returned garbage, so the game refused to start)"
-python3 "$HERE/patch_shaiolib_crk.py" "$GAME_DIR/shaiolib.CRK.dll"
+python3 "$PATCHES/patch_shaiolib_crk.py" "$GAME_DIR/shaiolib.CRK.dll"
 
 step "Patching KSHG.exe / KSHG_no_cursor.exe (movie fixes, boot checksum kept)"
-python3 "$HERE/patch_kshg_video.py" "$GAME_DIR/KSHG.exe" "$GAME_DIR/KSHG_no_cursor.exe"
+python3 "$PATCHES/patch_kshg_video.py" "$GAME_DIR/KSHG.exe" "$GAME_DIR/KSHG_no_cursor.exe"
 
 step "Building KSHG_cursor.exe (crosshair cursor version)"
-python3 "$HERE/patch_kshg_cursor.py" "$GAME_DIR/KSHG_no_cursor.exe" "$GAME_DIR/KSHG_cursor.exe"
+python3 "$PATCHES/patch_kshg_cursor.py" "$GAME_DIR/KSHG_no_cursor.exe" "$GAME_DIR/KSHG_cursor.exe"
 
 # ---------------------------------------------------------------------------
 # Movies
@@ -240,7 +252,7 @@ You can run the installer again later to convert them."
             step "Converting $pending movies to Cinepak ($JOBS parallel encoders)"
             mkdir -p "$GAME_DIR/.linux-tmp"
             LOG="$GAME_DIR/.linux-tmp/convert.log"
-            convert_cmd=(nice -n 10 python3 "$HERE/convert_videos.py" "$GAME_DIR" -j "$JOBS")
+            convert_cmd=(nice -n 10 python3 "$PATCHES/convert_videos.py" "$GAME_DIR" -j "$JOBS")
             if [ "$UI" = zenity ]; then
                 # converter output -> percentage and status lines for zenity's progress bar
                 if ! TMPDIR="$GAME_DIR/.linux-tmp" "${convert_cmd[@]}" 2>>"$LOG" | tee -a "$LOG" | awk '
@@ -261,7 +273,7 @@ $(tail -n 5 "$LOG")"
             rm -rf "$GAME_DIR/.linux-tmp"
             if [ "$DELETE_ORIG" = 1 ]; then
                 step "Deleting the original movies"
-                find "$GAME_DIR/Data" -name '*.vid.orig' -print -delete | sed "s|^$GAME_DIR/|  |"
+                find "$GAME_DIR/Data" -name '*.vid.orig' -printf '  Data/%P\n' -delete
             fi
         else
             MOVIES_NOTE="
@@ -270,7 +282,7 @@ Run the installer again to convert them."
         fi
     elif [ "$DELETE_ORIG" = 1 ]; then
         step "Deleting the original movies"
-        find "$GAME_DIR/Data" -name '*.vid.orig' -print -delete | sed "s|^$GAME_DIR/|  |"
+        find "$GAME_DIR/Data" -name '*.vid.orig' -printf '  Data/%P\n' -delete
     fi
 else
     MOVIES_NOTE="
@@ -282,9 +294,12 @@ fi
 # ---------------------------------------------------------------------------
 step "Installing the launcher"
 mkdir -p "$GAME_DIR/linux"
-cp -f "$HERE/proton.sh" "$HERE/make_default_bindings.py" "$GAME_DIR/linux/"
-cp -f "$HERE/run_linux.sh" "$GAME_DIR/run_linux.sh"
-chmod +x "$GAME_DIR/run_linux.sh"
+cp -f "$HERE/proton.sh" "$PATCHES/make_default_bindings.py" "$GAME_DIR/linux/"
+in_game_dir || cp -f "$HERE/run_linux.sh" "$GAME_DIR/run_linux.sh"
+# may fail on filesystems without Unix permissions (exFAT, some NTFS mounts);
+# the launcher then still works as "bash run_linux.sh"
+chmod +x "$GAME_DIR/run_linux.sh" 2>/dev/null ||
+    echo "  note: could not make run_linux.sh executable here; start it with: bash run_linux.sh"
 echo "$PROTON" > "$GAME_DIR/linux/proton_dir"
 echo "  $GAME_DIR/run_linux.sh"
 
