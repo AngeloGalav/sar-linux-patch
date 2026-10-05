@@ -105,6 +105,19 @@ Paths used by the launcher:
   (created on first run; key bindings live in
   `drive_c/users/*/AppData/Roaming/bemani_config/sha_v01.cfg`)
 
+## Steam Deck and SteamOS (Game Mode)
+
+1. In Desktop Mode, run `install.sh` as above.
+2. In Steam, choose *Add a Non-Steam Game* and select `run_linux.sh` in the
+   game folder (switch the file filter to *All Files* if it isn't listed).
+3. Open the new entry's *Properties* → *Compatibility*, tick *Force the use of
+   a specific Steam Play compatibility tool* and choose
+   **Steam Linux Runtime 1.0**. Don't pick a Proton version here: the launcher
+   already runs the game with GE-Proton.
+4. Optional: write `cursor` in *Launch Options* to play with the crosshair.
+
+The game then starts from Game Mode like any other Steam entry.
+
 ## Package contents
 
 ```
