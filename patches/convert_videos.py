@@ -8,8 +8,10 @@ libav, which is often unavailable (e.g. GE-Proton outside the Steam runtime).
 Cinepak is decoded by Wine's built-in iccvid through the AVI Decompressor, with
 no GStreamer decoder involved, and it outputs RGB32 directly.
 
-Output: AVI, Cinepak video (same size/fps), 16-bit stereo PCM 48 kHz (if the
-source had audio). Movies are not covered by the game's boot CRC check
+Output: AVI, Cinepak video (same size/fps), no audio: the game plays each
+movie's soundtrack itself (Data/Sound/EVENT/EV_*.pcm), so keeping the AVI's
+copy of it would make every line heard twice (see strip_movie_audio.py).
+Movies are not covered by the game's boot CRC check
 (only KSHG.exe and data\\TestMode\\ are), so replacing them is safe.
 
 Cinepak encoding in ffmpeg is single-threaded and slow, so every movie is cut
@@ -122,10 +124,8 @@ def main():
         lst = d / "list.txt"
         lst.write_text("".join(f"file '{s}'\n" for s in segs))
         out = d / "out.avi"
-        cmd = ["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst)]
-        if has_audio:
-            cmd += ["-i", str(src), "-map", "0:v:0", "-map", "1:a:0", "-c:a", "pcm_s16le", "-ac", "2", "-ar", "48000"]
-        cmd += ["-c:v", "copy", "-f", "avi", str(out)]
+        cmd = ["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst),
+               "-an", "-c:v", "copy", "-f", "avi", str(out)]
         run(cmd)
         orig = v.with_name(v.name + ".orig")
         if not orig.exists():

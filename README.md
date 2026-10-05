@@ -113,7 +113,8 @@ run_linux.sh      launcher, copied into the game folder by install.sh
 proton.sh         Proton lookup shared by the installer and the launcher
 patches/          Python scripts used by the installer
   patch_libutil_midi.py    patch_shaiolib_crk.py    patch_kshg_video.py
-  patch_kshg_cursor.py     convert_videos.py        make_default_bindings.py
+  patch_kshg_cursor.py     convert_videos.py        strip_movie_audio.py
+  make_default_bindings.py
 ```
 
 Each script in `patches/` can also be run on its own; its docstring explains
@@ -130,6 +131,7 @@ what it changes and how to call it. After installing, the game folder contains
 | `KSHG.exe`, `KSHG_no_cursor.exe` | Wine's async `StopWhenReady` stops movies after the first frame; NULL frame buffer crash when a movie can't be decoded | call `Pause` instead; NULL check. The file CRC checked at boot is preserved | `patch_kshg_video.py` |
 | `KSHG_cursor.exe` (new) | the crosshair was drawn by the Windows TTX loader | the game loads `sv/CrossHair.cur` itself | `patch_kshg_cursor.py` |
 | `Data/**/*.vid` | XviD / MPEG-2 movies: Proton 10 and older have no decoder for them | none needed with GE-Proton 11 (its DirectShow decodes through FFmpeg); otherwise re-encoded to Cinepak AVI, which Wine decodes itself | `convert_videos.py` |
+| `Data/**/*.vid` | the game plays each movie's soundtrack itself (`Data/Sound/EVENT/EV_*.pcm`) and the movie files carry the same audio, which Wine also plays: voices are heard twice, like an echo | the movies' audio track is dropped (video stream copy, no re-encoding, a few seconds) | `strip_movie_audio.py` |
 
 The launcher uses DXVK for Direct3D 9 (correct 640x480 fullscreen scaling),
 caps the game at 60 FPS like the Windows loader did (set `DXVK_FRAME_RATE=0`

@@ -443,20 +443,30 @@ fi
 [ -n "$PROTON" ] || die "No usable Proton was found. Install GE-Proton 11 (for example with ProtonUp-Qt) and run the installer again."
 
 if native_video; then
-    # converted copies from an earlier install are no longer needed: put the originals back
-    restored=0
-    while IFS= read -r -d '' f; do
-        mv -f "$f" "${f%.orig}"; restored=$((restored + 1))
-    done < <(find "$GAME_DIR/Data" -name '*.vid.orig' -print0)
     step "Movies"
     echo "  ${PROTON##*/} plays the original movies, no conversion needed"
-    if [ "$restored" -gt 0 ]; then echo "  put back $restored original movies (replacing earlier converted copies)"; fi
 elif [ "$VIDEO_MODE" = convert ]; then
     convert_movies
 else
     MOVIES_NOTE="
 The movies were not set up, so they may show a black screen.
 Run the installer again to get GE-Proton 11 or to convert them."
+fi
+
+# The game plays each movie's soundtrack itself (Data/Sound/EVENT), and the
+# movie files carry the same audio: under Wine both are heard, like an echo.
+# Drop the movies' audio track (stream copy, seconds). With GE-Proton 11 the
+# movies are rebuilt from the originals, undoing an earlier Cinepak conversion.
+step "Removing the duplicate audio track from the movies"
+if command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null; then
+    strip_args=("$GAME_DIR")
+    if native_video; then strip_args+=(--from-originals); fi
+    python3 "$PATCHES/strip_movie_audio.py" "${strip_args[@]}" | sed 's/^/  /' ||
+        die "Could not remove the audio track from the movies."
+else
+    echo "  ffmpeg not found: skipped (the movies' voices will be heard twice, like an echo)"
+    MOVIES_NOTE="$MOVIES_NOTE
+Install ffmpeg and run the installer again to fix the doubled voices in the movies."
 fi
 
 # ---------------------------------------------------------------------------
