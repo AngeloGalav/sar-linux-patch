@@ -38,6 +38,10 @@ export GST_PLUGIN_SYSTEM_PATH_1_0="$LIB/x86_64-linux-gnu/gstreamer-1.0:$LIB/i386
 export WINE_GST_REGISTRY_DIR="$(dirname "$WINEPREFIX")/gstreamer-1.0/"
 # DXVK d3d9: proper 640x480 fullscreen scaling (wined3d gives a squashed window).
 export WINEDLLOVERRIDES="d3d9=n,b${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
+# Cap at 60 FPS like the Windows TTX loader did ([FPS] Limit in TTX.ini): the
+# arcade game expects a 60 Hz display, so it could run too fast on 120/144 Hz
+# monitors. Override with DXVK_FRAME_RATE=0 to disable the cap.
+export DXVK_FRAME_RATE="${DXVK_FRAME_RATE:-60}"
 export WINEDEBUG="${WINEDEBUG:--all}"
 
 if [ ! -f "$WINEPREFIX/system.reg" ]; then
