@@ -14,7 +14,8 @@ source had audio). Movies are not covered by the game's boot CRC check
 
 Cinepak encoding in ffmpeg is single-threaded and slow, so every movie is cut
 into chunks of round(SEG * fps) frames encoded in parallel and joined with the
-concat demuxer.
+concat demuxer. Chunks are picked by frame number from a sequential decode, not
+by seeking (seeking corrupts the start of these XviD files).
 
 Raw MPEG-2 elementary streams (no container, no index) cannot be cut
 accurately with -ss, so they are first remuxed (stream copy) into Matroska
@@ -99,7 +100,13 @@ def main():
         first = 0
         while first < round(dur * fps):
             seg = d / f"seg{len(segs):04d}.avi"
-            jobs.append(["ffmpeg", "-v", "error", "-y", "-ss", f"{first / fps:.6f}", "-i", str(src),
+            # Select the segment by decoded frame number instead of seeking with -ss:
+            # these XviD files do not start with a keyframe (packed B-frames), and
+            # seeking (even to 0) skips the real first keyframe, corrupting the first
+            # ~2 s; it also lands one frame early. Decoding from the start is cheap.
+            last = first + seg_frames - 1
+            jobs.append(["ffmpeg", "-v", "error", "-y", "-i", str(src),
+                         "-vf", f"select=between(n\\,{first}\\,{last}),setpts=N/FRAME_RATE/TB",
                          "-frames:v", str(seg_frames), "-an", "-c:v", "cinepak", *quality, "-f", "avi", str(seg)])
             segs.append(seg); first += seg_frames
         plan.append((v, src, d, segs, has_audio))
