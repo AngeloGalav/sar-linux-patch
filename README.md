@@ -7,12 +7,15 @@ included: you need your own copy of the game.
 
 ## Requirements
 
-- **GE-Proton 10** (tested with GE-Proton10-34; install it with ProtonUp-Qt).
-  Proton Experimental / Proton 10 have the same layout and should also work.
-  Proton 9 and older are not supported.
-- `python3`
-- `ffmpeg` with the Cinepak encoder (standard in most distributions)
-- about 7 GB free on the game's disk for the movie conversion
+- **GE-Proton 11** (recommended, tested with GE-Proton11-7). It plays the
+  game's original movies. If you don't have it, the installer can download it
+  for you into Steam's `compatibilitytools.d`.
+- Without GE-Proton 11, GE-Proton 10 (tested with GE-Proton10-34) or another
+  Proton 10 build also runs the game, but the movies have to be converted
+  first (see below). Proton 9 and older are not supported.
+- `python3`, and `curl` to download GE-Proton
+- only for the movie conversion: `ffmpeg` with the Cinepak encoder and about
+  7 GB of free space on the game's disk
 - optional: `zenity` or `kdialog` for the installer windows
 
 ## Install
@@ -32,19 +35,24 @@ to questions in the terminal if neither is available):
 1. **Welcome**: shows the game folder and the Proton it found, and what it is
    about to do. Nothing is changed until you press *Install*.
 2. It patches the game binaries and creates the crosshair version (a few seconds).
-3. **Movie conversion**: the movies need re-encoding to a format Wine can play.
-   This is slow (about 20-30 minutes on a fast 16-core CPU, longer on slower
-   machines; the computer is busy meanwhile) and needs about 7 GB of free disk
-   space while it runs. You can *Skip* it (movies then show a black screen, and
-   you can run the installer again later). Two checkboxes:
-   - **Fast conversion**: about 2.5x faster (around 10 minutes on a fast CPU)
-     at slightly lower quality (39.8 instead of 40.2 dB PSNR on a test clip,
-     hard to tell apart);
-   - **Delete the original movies afterwards**: frees 1.3 GB, but `--restore`
-     can no longer bring them back.
-
-   A progress bar shows the conversion.
-4. **Installation done! Enjoy SH Arcade!**, with how to start the game.
+3. **Movies**: with GE-Proton 11 the original movies play as they are, so
+   nothing else is needed (movies converted by an earlier install are swapped
+   back for the originals). Without it you choose between:
+   - **Download and install GE-Proton 11** (about 560 MB, recommended): it goes
+     into Steam's `compatibilitytools.d`, so Steam can use it too after a
+     restart. The download is checked against its published SHA-512 checksum.
+   - **Convert the movies** for older Proton versions: slow (about 20-30
+     minutes on a fast 16-core desktop CPU, around 2 hours on a Steam Deck)
+     and needs about 7 GB of free disk space while it runs. Optional *fast
+     conversion* (about 2.5x faster, slightly lower quality) and *delete the
+     original movies afterwards* (frees 1.3 GB). A progress bar shows the
+     conversion.
+   - **Neither**: the game works, but the movies stay black.
+4. **Windows-only files**: offers to delete the files the Linux version
+   doesn't use (the TTX game loader and `TTX.ini`, `sv/Pad.ini`, the `.bat`
+   files, `DSFMgr.exe`, the repack's uninstaller, `README.txt`, `Info.txt`,
+   the website link and `images/`).
+5. **Installation done! Enjoy SH Arcade!**, with how to start the game.
 
 Every modified file is kept as `<name>.orig`. Running the installer again is
 safe (finished steps are skipped), and
@@ -53,17 +61,22 @@ safe (finished steps are skipped), and
 ./install.sh --restore "/path/to/Silent Hill Arcade"
 ```
 
-puts the originals back (except movies whose originals you chose to delete).
+puts the originals back (except movies whose originals you chose to delete
+and Windows files you chose to remove). GE-Proton and the Wine prefix are left
+in place.
 
 | Option | Effect |
 |---|---|
 | `--desktop` | add *Silent Hill: The Arcade* to the application menu |
-| `--no-videos` | skip the movie conversion |
+| `--install-proton` | download GE-Proton 11 if it is missing, without asking |
+| `--convert-videos` | if GE-Proton 11 is missing, convert the movies instead |
+| `--no-videos` | neither download GE-Proton 11 nor convert the movies |
 | `--fast-videos` | convert the movies about 2.5x faster at slightly lower quality |
 | `--delete-original-videos` | delete the original movies after converting them |
 | `--jobs N` | number of parallel encoders (default: all CPU cores) |
+| `--remove-windows-files` / `--keep-windows-files` | answer the Windows-files question in advance |
 | `--no-gui` | ask in the terminal instead of opening windows |
-| `--yes` | ask nothing: convert the movies and keep the originals |
+| `--yes` | ask nothing: download GE-Proton 11 if needed, keep the Windows files |
 
 ## Play
 
@@ -85,7 +98,7 @@ puts the originals back (except movies whose originals you chose to delete).
 Paths used by the launcher:
 
 - **game folder**: the folder `run_linux.sh` is in
-- **Proton**: `$PROTON_DIR`, else the one found by `install.sh`
+- **Proton**: `$PROTON_DIR`, else the one chosen by `install.sh`
   (`linux/proton_dir`), else the newest GE-Proton, then Proton Experimental/10,
   in the usual Steam locations (native and Flatpak)
 - **Wine prefix**: `$SH_PREFIX`, else `~/.local/share/sh-arcade/pfx`
@@ -116,10 +129,11 @@ what it changes and how to call it. After installing, the game folder contains
 | `shaiolib.CRK.dll` | `shaiolib_is_error()` returns a leftover register (1 under Wine), so the game flags an I/O error and won't start | return 0 | `patch_shaiolib_crk.py` |
 | `KSHG.exe`, `KSHG_no_cursor.exe` | Wine's async `StopWhenReady` stops movies after the first frame; NULL frame buffer crash when a movie can't be decoded | call `Pause` instead; NULL check. The file CRC checked at boot is preserved | `patch_kshg_video.py` |
 | `KSHG_cursor.exe` (new) | the crosshair was drawn by the Windows TTX loader | the game loads `sv/CrossHair.cur` itself | `patch_kshg_cursor.py` |
-| `Data/**/*.vid` | XviD / MPEG-2 movies need codecs Wine doesn't have | re-encoded to Cinepak AVI, decoded by Wine itself | `convert_videos.py` |
+| `Data/**/*.vid` | XviD / MPEG-2 movies: Proton 10 and older have no decoder for them | none needed with GE-Proton 11 (its DirectShow decodes through FFmpeg); otherwise re-encoded to Cinepak AVI, which Wine decodes itself | `convert_videos.py` |
 
-The launcher uses DXVK for Direct3D 9 (correct 640x480 fullscreen scaling)
-and sets up Proton's libraries so it works without Steam.
+The launcher uses DXVK for Direct3D 9 (correct 640x480 fullscreen scaling),
+caps the game at 60 FPS like the Windows loader did (set `DXVK_FRAME_RATE=0`
+to turn the cap off), and sets up Proton's libraries so it works without Steam.
 
 ## AI disclosure
 
