@@ -21,7 +21,10 @@ included: you need your own copy of the game.
 ./install.sh "/path/to/Silent Hill Arcade"
 ```
 
-(Without a path, the installer asks you to pick the game folder.)
+You can also unpack this package straight into the game folder and run
+`./install.sh` there without arguments. Without a path, the installer uses the
+current folder or its own folder if that is the game folder, and otherwise
+asks you to pick it.
 
 The installer guides you with a few windows (zenity or kdialog; it falls back
 to questions in the terminal if neither is available):
@@ -82,15 +85,31 @@ Paths used by the launcher:
   (created on first run; key bindings live in
   `drive_c/users/*/AppData/Roaming/bemani_config/sha_v01.cfg`)
 
+## Package contents
+
+```
+install.sh        installer (run this)
+run_linux.sh      launcher, copied into the game folder by install.sh
+proton.sh         Proton lookup shared by the installer and the launcher
+patches/          Python scripts used by the installer
+  patch_libutil_midi.py    patch_shaiolib_crk.py    patch_kshg_video.py
+  patch_kshg_cursor.py     convert_videos.py        make_default_bindings.py
+```
+
+Each script in `patches/` can also be run on its own; its docstring explains
+what it changes and how to call it. After installing, the game folder contains
+`run_linux.sh` and a `linux/` folder with the files the launcher needs
+(`proton.sh`, `make_default_bindings.py` and the chosen Proton path).
+
 ## What is patched and why
 
-| File | Problem under Wine | Fix |
-|---|---|---|
-| `libutil.dll` | exits if a MIDI input (PipeWire/ALSA port) fails to open | skip that device |
-| `shaiolib.CRK.dll` | `shaiolib_is_error()` returns a leftover register (1 under Wine), so the game flags an I/O error and won't start | return 0 |
-| `KSHG.exe`, `KSHG_no_cursor.exe` | Wine's async `StopWhenReady` stops movies after the first frame; NULL frame buffer crash when a movie can't be decoded | call `Pause` instead; NULL check. The file CRC checked at boot is preserved |
-| `KSHG_cursor.exe` (new) | the crosshair was drawn by the Windows TTX loader | the game loads `sv/CrossHair.cur` itself |
-| `Data/**/*.vid` | XviD / MPEG-2 movies need codecs Wine doesn't have | re-encoded to Cinepak AVI, decoded by Wine itself |
+| File | Problem under Wine | Fix | Script |
+|---|---|---|---|
+| `libutil.dll` | exits if a MIDI input (PipeWire/ALSA port) fails to open | skip that device | `patch_libutil_midi.py` |
+| `shaiolib.CRK.dll` | `shaiolib_is_error()` returns a leftover register (1 under Wine), so the game flags an I/O error and won't start | return 0 | `patch_shaiolib_crk.py` |
+| `KSHG.exe`, `KSHG_no_cursor.exe` | Wine's async `StopWhenReady` stops movies after the first frame; NULL frame buffer crash when a movie can't be decoded | call `Pause` instead; NULL check. The file CRC checked at boot is preserved | `patch_kshg_video.py` |
+| `KSHG_cursor.exe` (new) | the crosshair was drawn by the Windows TTX loader | the game loads `sv/CrossHair.cur` itself | `patch_kshg_cursor.py` |
+| `Data/**/*.vid` | XviD / MPEG-2 movies need codecs Wine doesn't have | re-encoded to Cinepak AVI, decoded by Wine itself | `convert_videos.py` |
 
 The launcher uses DXVK for Direct3D 9 (correct 640x480 fullscreen scaling)
 and sets up Proton's libraries so it works without Steam.
