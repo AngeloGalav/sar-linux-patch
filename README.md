@@ -36,8 +36,14 @@ to questions in the terminal if neither is available):
    This is slow (about 20-30 minutes on a fast 16-core CPU, longer on slower
    machines; the computer is busy meanwhile) and needs about 7 GB of free disk
    space while it runs. You can *Skip* it (movies then show a black screen, and
-   you can run the installer again later) and you can tick **Delete the original
-   movies afterwards** to free 1.3 GB. A progress bar shows the conversion.
+   you can run the installer again later). Two checkboxes:
+   - **Fast conversion**: about 2.5x faster (around 10 minutes on a fast CPU)
+     at slightly lower quality (39.8 instead of 40.2 dB PSNR on a test clip,
+     hard to tell apart);
+   - **Delete the original movies afterwards**: frees 1.3 GB, but `--restore`
+     can no longer bring them back.
+
+   A progress bar shows the conversion.
 4. **Installation done! Enjoy SH Arcade!**, with how to start the game.
 
 Every modified file is kept as `<name>.orig`. Running the installer again is
@@ -53,6 +59,7 @@ puts the originals back (except movies whose originals you chose to delete).
 |---|---|
 | `--desktop` | add *Silent Hill: The Arcade* to the application menu |
 | `--no-videos` | skip the movie conversion |
+| `--fast-videos` | convert the movies about 2.5x faster at slightly lower quality |
 | `--delete-original-videos` | delete the original movies after converting them |
 | `--jobs N` | number of parallel encoders (default: all CPU cores) |
 | `--no-gui` | ask in the terminal instead of opening windows |

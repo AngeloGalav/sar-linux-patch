@@ -12,6 +12,7 @@
 #
 #   --no-videos               skip the movie conversion (movies then stay black)
 #   --delete-original-videos  delete the original movies after converting them
+#   --fast-videos             convert the movies about 2.5x faster at slightly lower quality
 #   --jobs N                  parallel encoders for the movie conversion (default: all CPUs)
 #   --desktop                 also add "Silent Hill: The Arcade" to the application menu
 #   --no-gui                  ask in the terminal instead of opening dialog windows
@@ -20,12 +21,13 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 PATCHES="$HERE/patches"   # Python patchers, movie converter, default key bindings
-VIDEOS=1 DELETE_ORIG=0 JOBS="$(nproc)" DESKTOP=0 RESTORE=0 GUI=1 ASSUME_YES=0 GAME_DIR=""
+VIDEOS=1 DELETE_ORIG=0 FAST=0 JOBS="$(nproc)" DESKTOP=0 RESTORE=0 GUI=1 ASSUME_YES=0 GAME_DIR=""
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; }
 while [ $# -gt 0 ]; do
     case "$1" in
         --no-videos) VIDEOS=0 ;;
         --delete-original-videos) DELETE_ORIG=1 ;;
+        --fast-videos) FAST=1 ;;
         --jobs) JOBS="$2"; shift ;;
         --desktop) DESKTOP=1 ;;
         --restore) RESTORE=1 ;;
@@ -208,13 +210,15 @@ if [ "$VIDEOS" = 1 ]; then
 The game's movies are XviD and MPEG-2 videos, which need codecs Wine does not
 have, so $pending movies will be re-encoded to Cinepak, a format Wine plays by itself.
 
-This takes a long time: about 20-30 minutes on a fast 16-core CPU, and much
-longer on slower machines. The Cinepak encoder is old and slow, so the
-installer runs one encoder per CPU core ($JOBS here) and your computer will be
-busy until it finishes. About 7 GB of free disk space is needed while it runs.
+This takes a long time: about 20-30 minutes on a fast 16-core CPU (about
+10 minutes with fast conversion), and much longer on slower machines. The
+Cinepak encoder is old and slow, so the installer runs one encoder per CPU
+core ($JOBS here) and your computer will be busy until it finishes. About 7 GB
+of free disk space is needed while it runs.
 
 If you skip this step the game still works, but every movie is a black screen.
 You can run the installer again later to convert them."
+        label_fast="Fast conversion (about 2.5x faster, slightly lower quality)"
         label="Delete the original movies afterwards (frees 1.3 GB; they can't be restored)"
         convert=0
         if [ "$ASSUME_YES" = 1 ]; then
@@ -223,22 +227,30 @@ You can run the installer again later to convert them."
             case "$UI" in
                 zenity)
                     if out="$(zenity --list --checklist --title "$TITLE" --width 720 --height 520 \
-                                --text "$text" --hide-header --column "" --column "" FALSE "$label" \
+                                --text "$text" --hide-header --column "" --column "" \
+                                "$( [ "$FAST" = 1 ] && echo TRUE || echo FALSE )" "$label_fast" FALSE "$label" \
                                 --ok-label "Convert movies" --cancel-label "Skip" 2>/dev/null)"; then
-                        convert=1; [ -n "$out" ] && DELETE_ORIG=1
+                        convert=1
+                        FAST=0; if [[ "$out" == *"$label_fast"* ]]; then FAST=1; fi
+                        if [[ "$out" == *"$label"* ]]; then DELETE_ORIG=1; fi
                     fi ;;
                 kdialog)
                     if out="$(kdialog --title "$TITLE" --ok-label "Convert movies" --cancel-label "Skip" \
-                                --checklist "$text" delete "$label" off 2>/dev/null)"; then
-                        convert=1; [[ "$out" == *delete* ]] && DELETE_ORIG=1
+                                --checklist "$text" fast "$label_fast" "$( [ "$FAST" = 1 ] && echo on || echo off )" \
+                                delete "$label" off 2>/dev/null)"; then
+                        convert=1
+                        FAST=0; if [[ "$out" == *fast* ]]; then FAST=1; fi
+                        if [[ "$out" == *delete* ]]; then DELETE_ORIG=1; fi
                     fi ;;
                 text)
                     printf '\n%s\n\n' "$text"
                     read -r -p "Convert the movies now? [Y/n] " a < /dev/tty
                     if [[ ! "$a" =~ ^[Nn] ]]; then
                         convert=1
+                        read -r -p "Fast conversion (about 2.5x faster, slightly lower quality)? [y/N] " a < /dev/tty
+                        if [[ "$a" =~ ^[Yy] ]]; then FAST=1; fi
                         read -r -p "Delete the original movies afterwards (they can't be restored then)? [y/N] " a < /dev/tty
-                        [[ "$a" =~ ^[Yy] ]] && DELETE_ORIG=1
+                        if [[ "$a" =~ ^[Yy] ]]; then DELETE_ORIG=1; fi
                     fi ;;
             esac
         fi
@@ -249,10 +261,11 @@ You can run the installer again later to convert them."
             [ "$free" -ge "$need" ] ||
                 die "About 7 GB of free disk space is needed for the movie conversion, but only $((free / 1024 / 1024)) GB are free on the game's disk."
 
-            step "Converting $pending movies to Cinepak ($JOBS parallel encoders)"
+            step "Converting $pending movies to Cinepak ($JOBS parallel encoders$( [ "$FAST" = 1 ] && echo ", fast mode"))"
             mkdir -p "$GAME_DIR/.linux-tmp"
             LOG="$GAME_DIR/.linux-tmp/convert.log"
             convert_cmd=(nice -n 10 python3 "$PATCHES/convert_videos.py" "$GAME_DIR" -j "$JOBS")
+            if [ "$FAST" = 1 ]; then convert_cmd+=(--fast); fi
             if [ "$UI" = zenity ]; then
                 # converter output -> percentage and status lines for zenity's progress bar
                 if ! TMPDIR="$GAME_DIR/.linux-tmp" "${convert_cmd[@]}" 2>>"$LOG" | tee -a "$LOG" | awk '
